@@ -59,9 +59,10 @@ void Initialize() {
 
 	const GLchar* vertexShaderSource = tempStr.c_str();
 
-	readShaderSource("Shaders/basic_fs.glsl", tempStr);
+	string tempStr2;
+	readShaderSource("Shaders/basic_fs.glsl", tempStr2);
 
-	const GLchar* fragmentShaderSource = tempStr.c_str();
+	const GLchar* fragmentShaderSource = tempStr2.c_str();
 
 
 	vertexShader = glCreateShader(GL_VERTEX_SHADER);
@@ -110,13 +111,11 @@ void Initialize() {
 	glGenBuffers(1, &VBO);
 
 	glBindVertexArray(VAO);
-	glBindBuffer(GL_ARRAY_BUFFER, VBO);
-	glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+		glBindBuffer(GL_ARRAY_BUFFER, VBO);
+		glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
 
-	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(GLfloat), (GLvoid*)0);
-	glEnableVertexAttribArray(0);
-
-	glBindBuffer(GL_ARRAY_BUFFER, 0);
+		glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(GLfloat), (GLvoid*)0);
+		glEnableVertexAttribArray(0);
 
 	glBindVertexArray(0);
 
