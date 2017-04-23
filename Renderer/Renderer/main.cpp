@@ -46,9 +46,12 @@ GLuint EBO;
 GLuint uWorldMatrix;
 GLuint uViewMatrix;
 GLuint uProjectionMatrix;
+GLuint uWorldViewProjection;
+GLuint uNormalMatrix;
 glm::mat4x4 projectionMatrix;
 glm::vec3 cameraPosition;
 glm::quat cameraRotation;
+glm::vec3 lightPos;
 GLFWwindow* window;
 double deltaTime;
 double time;
@@ -60,10 +63,11 @@ float verticalAngle = 0.0f;
 GLuint texId;
 
 static const GLfloat vertices[] = {
-	0.5f,  0.5f, 0.0f,  // Top Right
-	0.5f, -0.5f, 0.0f,  // Bottom Right
-	-0.5f, -0.5f, 0.0f,  // Bottom Left
-	-0.5f,  0.5f, 0.0f   // Top Left 
+	// Positions          // Normals           // Texture Coords
+	0.5f,  0.5f, 0.0f,   0.0f, 0.0f, 1.0f,   1.0f, 1.0f,   // Top Right
+	0.5f, -0.5f, 0.0f,   0.0f, 0.0f, 1.0f,   1.0f, 0.0f,   // Bottom Right
+	-0.5f, -0.5f, 0.0f,   0.0f, 0.0f, 1.0f,   0.0f, 0.0f,   // Bottom Left
+	-0.5f,  0.5f, 0.0f,   0.0f, 0.0f, 1.0f,   0.0f, 1.0f    // Top Left 
 };
 
 GLuint indices[] = {  // Note that we start from 0!
@@ -205,8 +209,15 @@ void Initialize() {
 		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
 		glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
 
-		glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(GLfloat), (GLvoid*)0);
+		// Positions
+		glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(GLfloat), (GLvoid*)0);
 		glEnableVertexAttribArray(0);
+		// Normals
+		glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(GLfloat), (GLvoid*)(3 * sizeof(GLfloat)));
+		glEnableVertexAttribArray(1);
+		// TexCoords
+		glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(GLfloat), (GLvoid*)(6 * sizeof(GLfloat)));
+		glEnableVertexAttribArray(2);
 
 	glBindVertexArray(0);
 
@@ -218,6 +229,10 @@ void Initialize() {
 
 	// Set clear color
 	glClearColor(0.1, 0.1, 0.1, 1.0);
+
+
+	// Init light pos
+	lightPos = glm::vec3(0.0f, 0.0f, 3.0f);
 
 }
 
@@ -304,7 +319,9 @@ void Draw()
 	// MATRICES
 	uWorldMatrix = glGetUniformLocation(shaderProgram, "uWorldMatrix");
 	uViewMatrix = glGetUniformLocation(shaderProgram, "uViewMatrix");
+	uNormalMatrix = glGetUniformLocation(shaderProgram, "uNormalMatrix");
 	uProjectionMatrix = glGetUniformLocation(shaderProgram, "uProjectionMatrix");
+	uWorldViewProjection = glGetUniformLocation(shaderProgram, "uWorldViewProjection");
 	
 	// World Matrix
 	glm::mat4x4 worldMatrix = glm::translate(glm::mat4x4(1.0f), glm::vec3(0.0f,0.0f,-3.0f));
@@ -320,6 +337,24 @@ void Draw()
 	glm::mat4x4 viewMatrix = rotMatrix * glm::inverse(cameraTransMatrix);
 	glUniformMatrix4fv(uViewMatrix, 1, GL_FALSE, &viewMatrix[0][0]);	
 	glUniformMatrix4fv(uProjectionMatrix, 1, GL_FALSE, &projectionMatrix[0][0]);
+
+	// World-View-Projection Matrix
+	glm::mat4x4 wvp = projectionMatrix * viewMatrix * worldMatrix;
+	glUniformMatrix4fv(uWorldViewProjection, 1, GL_FALSE, &wvp[0][0]);
+
+	// Normal Matrix
+	glm::mat3x3 normalMatrix = glm::inverseTranspose(glm::mat3(viewMatrix * worldMatrix));
+	glUniformMatrix3fv(uNormalMatrix, 1, GL_FALSE, &normalMatrix[0][0]);
+
+	GLuint loc = glGetUniformLocation(shaderProgram, "lightPos");
+	glUniform3fv(loc, 1, &lightPos[0]);
+
+	loc = glGetUniformLocation(shaderProgram, "uCameraPosition");
+	glUniform3f(loc, cameraPosition.x, cameraPosition.y, cameraPosition.z);
+
+	glActiveTexture(GL_TEXTURE0 + texId);
+	glBindTexture(GL_TEXTURE_2D, texId);
+	glUniform1i(glGetUniformLocation(shaderProgram, "myTexture"), texId);
 
 	glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
 	glBindVertexArray(0);
