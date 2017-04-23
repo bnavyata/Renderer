@@ -4,8 +4,13 @@ layout (location = 0) in vec3 position;
 
 varying vec3 cols;
 
+uniform mat4 uWorldMatrix;
+uniform mat4 uViewMatrix;
+uniform mat4 uProjectionMatrix;
+
 void main()
-{
-	cols = position;
-	gl_Position = vec4(position.x, position.y, position.z, 1.0);
+{			
+	vec4 calcPos = uProjectionMatrix * uViewMatrix * uWorldMatrix * vec4(position.xyz, 1.0);
+	cols = calcPos.xyz;
+	gl_Position = calcPos;
 }

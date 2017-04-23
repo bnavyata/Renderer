@@ -3,6 +3,12 @@
 #include <iostream>
 #include <stdio.h>
 #include <string>
+#include <glm/glm.hpp>
+#include <glm/gtc/quaternion.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/matrix_inverse.hpp>
+#include <freeimage.h>
+
 using namespace std;
 
 void key_callback(GLFWwindow* window, int key, int scancode, int action, int mode)
@@ -37,8 +43,23 @@ GLuint VBO;//vertex buffer object
 GLuint shaderProgram;
 GLuint VAO;
 GLuint EBO;
+GLuint uWorldMatrix;
+GLuint uViewMatrix;
+GLuint uProjectionMatrix;
+glm::mat4x4 projectionMatrix;
+glm::vec3 cameraPosition;
+glm::quat cameraRotation;
+GLFWwindow* window;
+double deltaTime;
+double time;
+double lastTime;
+double prevX;
+double prevY;
+float horizontalAngle = 3.14f;
+float verticalAngle = 0.0f;
+GLuint texId;
 
-GLfloat vertices[] = {
+static const GLfloat vertices[] = {
 	0.5f,  0.5f, 0.0f,  // Top Right
 	0.5f, -0.5f, 0.0f,  // Bottom Right
 	-0.5f, -0.5f, 0.0f,  // Bottom Left
@@ -50,7 +71,54 @@ GLuint indices[] = {  // Note that we start from 0!
 	1, 2, 3    // Second Triangle
 };
 
-void Initialize() {	
+void loadTexture(const string &filename) {
+	// Texture not created before. So create new one.
+
+	
+	//Texture2D texture2D;
+	// dimensions of the texture
+	int tex_width, tex_height;
+	// raw texture data
+	FIBITMAP *texDataPtr;
+
+	const char* filenametemp = filename.c_str();
+
+	FREE_IMAGE_FORMAT image_format = FreeImage_GetFileType(filenametemp, 0);
+	texDataPtr = FreeImage_Load(image_format, filenametemp);
+	texDataPtr = FreeImage_ConvertTo32Bits(texDataPtr);
+	tex_width = FreeImage_GetWidth(texDataPtr);
+	tex_height = FreeImage_GetHeight(texDataPtr);
+	if (!texDataPtr) {
+		std::cerr << "Cannot load texture file " << filenametemp << std::endl;
+	}
+
+	GLubyte* final_pixels = new GLubyte[4 * tex_width*tex_height];
+	char* temp_pixels = (char*)FreeImage_GetBits(texDataPtr);
+
+
+	//FreeImage loads in BGR format, so you need to swap some bytes(Or use GL_BGR).
+	// Switching BGRA -> RGBA
+	for (int j = 0; j < tex_width*tex_height; j++) {
+		final_pixels[j * 4 + 0] = temp_pixels[j * 4 + 2];
+		final_pixels[j * 4 + 1] = temp_pixels[j * 4 + 1];
+		final_pixels[j * 4 + 2] = temp_pixels[j * 4 + 0];
+		final_pixels[j * 4 + 3] = temp_pixels[j * 4 + 3];
+	}
+
+	glGenTextures(1, &texId);
+	glActiveTexture(GL_TEXTURE0 + texId);
+	glBindTexture(GL_TEXTURE_2D, texId);
+	//glTexStorage2D(GL_TEXTURE_2D, 1, GL_RGBA, tex_width, tex_height);
+	//glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+	glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, tex_width, tex_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, final_pixels);	
+
+}
+
+void Initialize() {
 
 	/* SHADERS */	
 
@@ -61,13 +129,16 @@ void Initialize() {
 	/* vertex shader*/
 	GLuint vertexShader;
 
+	// Read shader file into a character array
 	string tempStr;
 	readShaderSource("Shaders/basic_vs.glsl", tempStr);
-
 	const GLchar* vertexShaderSource = tempStr.c_str();
 
+	// Create a vertex shader
 	vertexShader = glCreateShader(GL_VERTEX_SHADER);
+	// Load shader from source into GL_VERTEX_SHADER target represented by vertexShader
 	glShaderSource(vertexShader, 1, &vertexShaderSource, NULL);
+	// Compile shader
 	glCompileShader(vertexShader);
 
 	/* check success for vertex shader*/
@@ -78,10 +149,10 @@ void Initialize() {
 		std::cout << "ERROR::SHADER::VERTEX::COMPILATION_FAILED\n" << infoLog << std::endl;
 	}
 
+
+	// Repeat for Fragment shader
 	readShaderSource("Shaders/basic_fs.glsl", tempStr);
-
 	const GLchar* fragmentShaderSource = tempStr.c_str();	
-
 	/* fragment shader*/
 	GLuint fragmentShader;
 	fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
@@ -95,8 +166,7 @@ void Initialize() {
 		std::cout << "ERROR::SHADER::FRAGMENT::COMPILATION_FAILED\n" << infoLog << std::endl;
 	}
 
-	/* shader program to link the shaders*/
-	
+	/* shader program to link the shaders*/	
 	shaderProgram = glCreateProgram();
 	glAttachShader(shaderProgram, vertexShader);
 	glAttachShader(shaderProgram, fragmentShader);
@@ -111,10 +181,23 @@ void Initialize() {
 	glDeleteShader(vertexShader);
 	glDeleteShader(fragmentShader);
 
+
 	// MODEL
 	glGenVertexArrays(1, &VAO);
 	glGenBuffers(1, &VBO);
 	glGenBuffers(1, &EBO);
+
+
+	// MATRICES
+	
+	float fov = 45.0f;
+	int width, height;
+	glfwGetFramebufferSize(window, &width, &height);
+	float aspectRatio = width / height;
+	float nearPlane = 0.1f;
+	float farPlane = 100.0f;
+	// View -> Projection Matrix	
+	projectionMatrix = glm::perspective(fov, aspectRatio, nearPlane, farPlane);	
 
 	glBindVertexArray(VAO);
 		glBindBuffer(GL_ARRAY_BUFFER, VBO);
@@ -127,27 +210,123 @@ void Initialize() {
 
 	glBindVertexArray(0);
 
+	// TEXTURES
+
+	loadTexture("Textures/checkerboard.png");
+	
+
+
+	// Set clear color
+	glClearColor(0.1, 0.1, 0.1, 1.0);
+
+}
+
+void cameraController() {
+
+	const float speed = 3.0f;
+	const float mouseSpeed = 5.0f;
+
+	// Invert vertical look
+	bool inverted = false;
+	int sign = 1;
+
+	// Get mouse position
+	double xpos, ypos;
+	glfwGetCursorPos(window, &xpos, &ypos);
+
+	if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS)
+	{
+		if (inverted)
+			sign = -1;
+
+		// Compute new orientation
+		horizontalAngle += mouseSpeed * float(deltaTime) * float(prevX - xpos);
+		verticalAngle += mouseSpeed * float(deltaTime) * float(prevY - ypos) * sign;
+	}
+	prevX = xpos;
+	prevY = ypos;
+
+	glm::vec3 direction(
+		cos(verticalAngle) * sin(horizontalAngle),
+		sin(verticalAngle),
+		cos(verticalAngle) * cos(horizontalAngle)
+		);
+
+	direction = glm::normalize(direction);
+
+	// Right vector
+	glm::vec3 right = glm::vec3(
+		sin(horizontalAngle - 3.14f / 2.0f),
+		0,
+		cos(horizontalAngle - 3.14f / 2.0f)
+		);
+
+	right = glm::normalize(right);
+
+	glm::vec3 up = glm::cross(right, direction);
+
+	// Move forward
+	if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) {
+		cameraPosition += direction * float(deltaTime) * speed;
+	}
+	// Move backward
+	if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) {
+		cameraPosition -= direction  * float(deltaTime) * speed;
+	}
+	// Strafe right
+	if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) {
+		cameraPosition += right * float(deltaTime) * speed;
+	}
+	// Strafe left
+	if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) {
+		cameraPosition -= right * float(deltaTime) * speed;
+	}
+	// up
+	if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS) {
+		cameraPosition -= up * float(deltaTime) * speed;
+	}
+	// down
+	if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS) {
+		cameraPosition += up * float(deltaTime) * speed;
+	}
+
+	glm::mat4x4 rotMatrix = glm::lookAt(glm::vec3(0), direction, up);
+	cameraRotation = glm::quat_cast(rotMatrix);
+
 }
 
 void Draw()
-{
-	glClearColor(0.1, 0.1, 0.1, 1.0);
+{	
 	glClear(GL_COLOR_BUFFER_BIT);	
 	glUseProgram(shaderProgram);
 	glBindVertexArray(VAO);
-	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
-	//glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
+
+	// MATRICES
+	uWorldMatrix = glGetUniformLocation(shaderProgram, "uWorldMatrix");
+	uViewMatrix = glGetUniformLocation(shaderProgram, "uViewMatrix");
+	uProjectionMatrix = glGetUniformLocation(shaderProgram, "uProjectionMatrix");
+	
+	// World Matrix
+	glm::mat4x4 worldMatrix = glm::translate(glm::mat4x4(1.0f), glm::vec3(0.0f,0.0f,-3.0f));
+	
+	glUniformMatrix4fv(uWorldMatrix, 1, GL_FALSE, &worldMatrix[0][0]);
+
+	cameraController();
+	
+	// View Matrix
+	//cameraPosition.z += 0.001f;
+	glm::mat4x4 rotMatrix = glm::mat4_cast(cameraRotation);
+	glm::mat4x4 cameraTransMatrix = glm::translate(glm::mat4x4(1.0f), cameraPosition);
+	glm::mat4x4 viewMatrix = rotMatrix * glm::inverse(cameraTransMatrix);
+	glUniformMatrix4fv(uViewMatrix, 1, GL_FALSE, &viewMatrix[0][0]);	
+	glUniformMatrix4fv(uProjectionMatrix, 1, GL_FALSE, &projectionMatrix[0][0]);
+
 	glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
 	glBindVertexArray(0);
 }
 
 int main(void)
 {
-	/*creates a window*/
-	GLFWwindow* window;
-
-	
-
 	/* Initialize the library */
 	if (!glfwInit())
 		return -1;
@@ -183,9 +362,9 @@ int main(void)
 	/* Loop until the user closes the window */
 	while (!glfwWindowShouldClose(window))
 	{		
+		time = glfwGetTime();
+		deltaTime = time - lastTime;
 		/* Render here */
-		
-
 		Draw();
 		
 		/* Swap front and back buffers */
@@ -193,6 +372,9 @@ int main(void)
 
 		/* Poll for and process events */
 		glfwPollEvents();
+
+		// Update last time
+		lastTime = time;
 	}
 
 	glfwTerminate();
