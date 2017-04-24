@@ -22,11 +22,11 @@ out vec3 ltPos;
 out vec3 cameraPosition;
 
 void main()
-{			
-	TexCoord = texCoord;
-	pos = (uViewMatrix * uWorldMatrix * vec4(position.xyz, 1.0)).xyz;
-	ltPos = (uViewMatrix * uWorldMatrix * vec4(lightPos.xyz, 1.0)).xyz;
-	norm = (uViewMatrix * uWorldMatrix * vec4(normal.xyz, 1.0)).xyz;
-	cameraPosition = (uViewMatrix * uWorldMatrix * vec4(uCameraPosition.xyz, 1.0)).xyz;
+{	
+	pos = (uWorldMatrix * vec4(position.xyz, 1.0)).xyz;
+	ltPos = (uWorldMatrix * vec4(lightPos,1.0)).xyz;
+	norm = normalize(uWorldMatrix * vec4(normal, 0.0)).xyz;
+	cameraPosition = (uWorldMatrix * vec4(uCameraPosition.xyz, 1.0)).xyz;
+	TexCoord = position.xy;
 	gl_Position = uWorldViewProjection * vec4(position.xyz, 1.0);
 }
